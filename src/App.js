@@ -5,8 +5,6 @@ import {
   FaMicrophoneSlash,
   FaVideo,
   FaVideoSlash,
-  FaVideoCamera,
-  FaMicrophoneAlt,
 } from "react-icons/fa";
 import "./App.css";
 
@@ -27,59 +25,128 @@ function App() {
   const localAudioTrackRef = useRef(null);
 
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-      const videos = devices.filter(d => d.kind === "videoinput");
-      const audios = devices.filter(d => d.kind === "audioinput");
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const videos = devices.filter((d) => d.kind === "videoinput");
+      const audios = devices.filter((d) => d.kind === "audioinput");
       setVideoDevices(videos);
       setAudioDevices(audios);
       if (videos[0]) setSelectedVideoDevice(videos[0].deviceId);
       if (audios[0]) setSelectedAudioDevice(audios[0].deviceId);
     });
-  }, []);
+
+    // Cleanup on unmount
+    return () => {
+      if (room) {
+        room.disconnect();
+      }
+    };
+  }, [room]);
+
+  const attachTrack = (track, participantId) => {
+    if (!track) return;
+    const trackElement = track.attach();
+    trackElement.setAttribute("data-participant-id", participantId); // Track participant ID
+    trackElement.style.width = "100%";
+    trackElement.style.height = "100%";
+    remoteMediaRef.current.appendChild(trackElement);
+  };
+
+  const detachTrack = (track) => {
+    if (track) {
+      const elements = track.detach();
+      elements.forEach((element) => element.remove());
+    }
+  };
 
   const joinRoom = async () => {
-    const res = await fetch("https://video-call-be-sooty.vercel.app/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identity, room: roomName }),
-    });
-    const data = await res.json();
-
-    const localVideoTrack = await Video.createLocalVideoTrack({
-      deviceId: { exact: selectedVideoDevice },
-    });
-    const localAudioTrack = await Video.createLocalAudioTrack({
-      deviceId: { exact: selectedAudioDevice },
-    });
-
-    localVideoTrackRef.current = localVideoTrack;
-    localAudioTrackRef.current = localAudioTrack;
-
-    const joinedRoom = await Video.connect(data.token, {
-      name: roomName,
-      tracks: [localAudioTrack, localVideoTrack],
-    });
-
-    setRoom(joinedRoom);
-
-    localMediaRef.current.innerHTML = "";
-    const videoElement = localVideoTrack.attach();
-    videoElement.setAttribute("controls", "false");
-    localMediaRef.current.appendChild(videoElement);
-
-    const attachTrack = track => {
-      remoteMediaRef.current.appendChild(track.attach());
-    };
-
-    joinedRoom.on("participantConnected", participant => {
-      participant.on("trackSubscribed", attachTrack);
-    });
-
-    joinedRoom.participants.forEach(participant => {
-      participant.tracks.forEach(pub => {
-        if (pub.track) attachTrack(pub.track);
+    try {
+      const res = await fetch("https://video-call-be-sooty.vercel.app/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity, room: roomName }),
       });
-    });
+      const data = await res.json();
+
+      const localVideoTrack = await Video.createLocalVideoTrack({
+        deviceId: { exact: selectedVideoDevice },
+      });
+      const localAudioTrack = await Video.createLocalAudioTrack({
+        deviceId: { exact: selectedAudioDevice },
+      });
+
+      localVideoTrackRef.current = localVideoTrack;
+      localAudioTrackRef.current = localAudioTrack;
+
+      const joinedRoom = await Video.connect(data.token, {
+        name: roomName,
+        tracks: [localAudioTrack, localVideoTrack],
+      });
+
+      setRoom(joinedRoom);
+
+      // Attach local video
+      localMediaRef.current.innerHTML = "";
+      const videoElement = localVideoTrack.attach();
+      videoElement.setAttribute("controls", "false");
+      videoElement.style.width = "100%";
+      videoElement.style.height = "100%";
+      localMediaRef.current.appendChild(videoElement);
+
+      // Handle existing participants
+      joinedRoom.participants.forEach((participant) => {
+        participant.tracks.forEach((publication) => {
+          if (publication.isSubscribed && publication.track) {
+            attachTrack(publication.track, participant.sid);
+          }
+        });
+        participant.on("trackSubscribed", (track) => {
+          attachTrack(track, participant.sid);
+        });
+        participant.on("trackUnsubscribed", detachTrack);
+      });
+
+      // Handle new participants
+      joinedRoom.on("participantConnected", (participant) => {
+        participant.tracks.forEach((publication) => {
+          if (publication.isSubscribed && publication.track) {
+            attachTrack(publication.track, participant.sid);
+          }
+        });
+        participant.on("trackSubscribed", (track) => {
+          attachTrack(track, participant.sid);
+        });
+        participant.on("trackUnsubscribed", detachTrack);
+      });
+
+      // Handle participant disconnection
+      joinedRoom.on("participantDisconnected", (participant) => {
+        const elements = remoteMediaRef.current.querySelectorAll(
+          `[data-participant-id="${participant.sid}"]`
+        );
+        elements.forEach((element) => element.remove());
+      });
+
+      // Handle track disabled/enabled
+      joinedRoom.on("trackDisabled", (track, participant) => {
+        const elements = remoteMediaRef.current.querySelectorAll(
+          `[data-participant-id="${participant.sid}"]`
+        );
+        elements.forEach((element) => {
+          if (track.kind === "video") element.style.display = "none";
+        });
+      });
+
+      joinedRoom.on("trackEnabled", (track, participant) => {
+        const elements = remoteMediaRef.current.querySelectorAll(
+          `[data-participant-id="${participant.sid}"]`
+        );
+        elements.forEach((element) => {
+          if (track.kind === "video") element.style.display = "block";
+        });
+      });
+    } catch (error) {
+      console.error("Error joining room:", error);
+    }
   };
 
   const toggleVideo = () => {
@@ -98,37 +165,47 @@ function App() {
 
   const switchVideoDevice = async (deviceId) => {
     if (!room || !localVideoTrackRef.current) return;
-    const currentTrack = localVideoTrackRef.current;
-    const newVideoTrack = await Video.createLocalVideoTrack({
-      deviceId: { exact: deviceId },
-    });
+    try {
+      const currentTrack = localVideoTrackRef.current;
+      const newVideoTrack = await Video.createLocalVideoTrack({
+        deviceId: { exact: deviceId },
+      });
 
-    room.localParticipant.unpublishTrack(currentTrack);
-    room.localParticipant.publishTrack(newVideoTrack);
+      await room.localParticipant.unpublishTrack(currentTrack);
+      await room.localParticipant.publishTrack(newVideoTrack);
 
-    localMediaRef.current.innerHTML = "";
-    const videoElement = newVideoTrack.attach();
-    videoElement.setAttribute("controls", "false");
-    localMediaRef.current.appendChild(videoElement);
+      localMediaRef.current.innerHTML = "";
+      const videoElement = newVideoTrack.attach();
+      videoElement.setAttribute("controls", "false");
+      videoElement.style.width = "100%";
+      videoElement.style.height = "100%";
+      localMediaRef.current.appendChild(videoElement);
 
-    currentTrack.stop();
-    localVideoTrackRef.current = newVideoTrack;
-    setSelectedVideoDevice(deviceId);
+      currentTrack.stop();
+      localVideoTrackRef.current = newVideoTrack;
+      setSelectedVideoDevice(deviceId);
+    } catch (error) {
+      console.error("Error switching video device:", error);
+    }
   };
 
   const switchAudioDevice = async (deviceId) => {
     if (!room || !localAudioTrackRef.current) return;
-    const currentTrack = localAudioTrackRef.current;
-    const newAudioTrack = await Video.createLocalAudioTrack({
-      deviceId: { exact: deviceId },
-    });
+    try {
+      const currentTrack = localAudioTrackRef.current;
+      const newAudioTrack = await Video.createLocalAudioTrack({
+        deviceId: { exact: deviceId },
+      });
 
-    room.localParticipant.unpublishTrack(currentTrack);
-    room.localParticipant.publishTrack(newAudioTrack);
+      await room.localParticipant.unpublishTrack(currentTrack);
+      await room.localParticipant.publishTrack(newAudioTrack);
 
-    currentTrack.stop();
-    localAudioTrackRef.current = newAudioTrack;
-    setSelectedAudioDevice(deviceId);
+      currentTrack.stop();
+      localAudioTrackRef.current = newAudioTrack;
+      setSelectedAudioDevice(deviceId);
+    } catch (error) {
+      console.error("Error switching audio device:", error);
+    }
   };
 
   return (
@@ -165,7 +242,7 @@ function App() {
               onChange={(e) => switchVideoDevice(e.target.value)}
               title="Select Camera"
             >
-              {videoDevices.map(device => (
+              {videoDevices.map((device) => (
                 <option key={device.deviceId} value={device.deviceId}>
                   🎥 {device.label || "Camera"}
                 </option>
@@ -176,7 +253,7 @@ function App() {
               onChange={(e) => switchAudioDevice(e.target.value)}
               title="Select Microphone"
             >
-              {audioDevices.map(device => (
+              {audioDevices.map((device) => (
                 <option key={device.deviceId} value={device.deviceId}>
                   🎤 {device.label || "Microphone"}
                 </option>
