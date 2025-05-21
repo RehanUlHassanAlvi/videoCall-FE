@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import Video from "twilio-video";
+import {
+  FaMicrophone,
+  FaMicrophoneSlash,
+  FaVideo,
+  FaVideoSlash,
+  FaVideoCamera,
+  FaMicrophoneAlt,
+} from "react-icons/fa";
 import "./App.css";
 
 function App() {
@@ -95,17 +103,14 @@ function App() {
       deviceId: { exact: deviceId },
     });
 
-    // Replace the track in the room
     room.localParticipant.unpublishTrack(currentTrack);
     room.localParticipant.publishTrack(newVideoTrack);
 
-    // Update the video element
     localMediaRef.current.innerHTML = "";
     const videoElement = newVideoTrack.attach();
     videoElement.setAttribute("controls", "false");
     localMediaRef.current.appendChild(videoElement);
 
-    // Clean up old track
     currentTrack.stop();
     localVideoTrackRef.current = newVideoTrack;
     setSelectedVideoDevice(deviceId);
@@ -118,11 +123,9 @@ function App() {
       deviceId: { exact: deviceId },
     });
 
-    // Replace the track in the room
     room.localParticipant.unpublishTrack(currentTrack);
     room.localParticipant.publishTrack(newAudioTrack);
 
-    // Clean up old track
     currentTrack.stop();
     localAudioTrackRef.current = newAudioTrack;
     setSelectedAudioDevice(deviceId);
@@ -130,7 +133,7 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Twilio Video Chat</h1>
+      <h1>🎥 Twilio Video Chat</h1>
 
       <div className="form-section">
         <input
@@ -151,22 +154,16 @@ function App() {
           <h2>🧑‍💻 You</h2>
           <div className="video-box" ref={localMediaRef}></div>
           <div className="video-controls">
-            <button
-              onClick={toggleAudio}
-              aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
-            >
-              {isAudioEnabled ? "Mute Mic" : "Unmute Mic"}
+            <button onClick={toggleAudio} title="Toggle Microphone">
+              {isAudioEnabled ? <FaMicrophone /> : <FaMicrophoneSlash />}
             </button>
-            <button
-              onClick={toggleVideo}
-              aria-label={isVideoEnabled ? "Turn off video" : "Turn on video"}
-            >
-              {isVideoEnabled ? "Turn Off Video" : "Turn On Video"}
+            <button onClick={toggleVideo} title="Toggle Camera">
+              {isVideoEnabled ? <FaVideo /> : <FaVideoSlash />}
             </button>
             <select
               value={selectedVideoDevice}
               onChange={(e) => switchVideoDevice(e.target.value)}
-              aria-label="Select camera"
+              title="Select Camera"
             >
               {videoDevices.map(device => (
                 <option key={device.deviceId} value={device.deviceId}>
@@ -177,7 +174,7 @@ function App() {
             <select
               value={selectedAudioDevice}
               onChange={(e) => switchAudioDevice(e.target.value)}
-              aria-label="Select microphone"
+              title="Select Microphone"
             >
               {audioDevices.map(device => (
                 <option key={device.deviceId} value={device.deviceId}>
