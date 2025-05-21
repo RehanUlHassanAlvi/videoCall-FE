@@ -18,24 +18,44 @@ function App() {
   const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [error, setError] = useState(null);
 
   const localMediaRef = useRef();
   const remoteMediaRef = useRef();
   const localVideoTrackRef = useRef(null);
   const localAudioTrackRef = useRef(null);
 
-  useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
+  // Update device list and handle device changes
+  const updateDevices = async () => {
+    try {
+      // Request permissions to ensure device labels are available
+      await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
       const videos = devices.filter((d) => d.kind === "videoinput");
       const audios = devices.filter((d) => d.kind === "audioinput");
       setVideoDevices(videos);
       setAudioDevices(audios);
-      if (videos[0]) setSelectedVideoDevice(videos[0].deviceId);
-      if (audios[0]) setSelectedAudioDevice(audios[0].deviceId);
-    });
 
-    // Cleanup on unmount
+      // Set default devices if none selected or if selected device is no longer available
+      if (!selectedVideoDevice || !videos.find((d) => d.deviceId === selectedVideoDevice)) {
+        setSelectedVideoDevice(videos[0]?.deviceId || "");
+      }
+      if (!selectedAudioDevice || !audios.find((d) => d.deviceId === selectedAudioDevice)) {
+        setSelectedAudioDevice(audios[0]?.deviceId || "");
+      }
+    } catch (err) {
+      console.error("Error enumerating devices:", err);
+      setError("Failed to access media devices. Please check permissions.");
+    }
+  };
+
+  useEffect(() => {
+    updateDevices();
+
+    // Listen for device changes (e.g., camera plugged/unplugged)
+    navigator.mediaDevices.addEventListener("devicechange", updateDevices);
     return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", updateDevices);
       if (room) {
         room.disconnect();
       }
@@ -45,7 +65,7 @@ function App() {
   const attachTrack = (track, participantId) => {
     if (!track) return;
     const trackElement = track.attach();
-    trackElement.setAttribute("data-participant-id", participantId); // Track participant ID
+    trackElement.setAttribute("data-participant-id", participantId);
     trackElement.style.width = "100%";
     trackElement.style.height = "100%";
     remoteMediaRef.current.appendChild(trackElement);
@@ -60,6 +80,7 @@ function App() {
 
   const joinRoom = async () => {
     try {
+      setError(null);
       const res = await fetch("https://video-call-be-sooty.vercel.app/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,12 +88,26 @@ function App() {
       });
       const data = await res.json();
 
-      const localVideoTrack = await Video.createLocalVideoTrack({
-        deviceId: { exact: selectedVideoDevice },
-      });
-      const localAudioTrack = await Video.createLocalAudioTrack({
-        deviceId: { exact: selectedAudioDevice },
-      });
+      // Create tracks with fallback if deviceId is invalid
+      let localVideoTrack = null;
+      let localAudioTrack = null;
+      try {
+        localVideoTrack = await Video.createLocalVideoTrack(
+          selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : {}
+        );
+      } catch (err) {
+        console.warn("Failed to create video track with selected device, falling back:", err);
+        localVideoTrack = await Video.createLocalVideoTrack(); // Fallback to default
+      }
+
+      try {
+        localAudioTrack = await Video.createLocalAudioTrack(
+          selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : {}
+        );
+      } catch (err) {
+        console.warn("Failed to create audio track with selected device, falling back:", err);
+        localAudioTrack = await Video.createLocalAudioTrack(); // Fallback to default
+      }
 
       localVideoTrackRef.current = localVideoTrack;
       localAudioTrackRef.current = localAudioTrack;
@@ -146,6 +181,7 @@ function App() {
       });
     } catch (error) {
       console.error("Error joining room:", error);
+      setError(`Failed to join room: ${error.message}`);
     }
   };
 
@@ -166,10 +202,17 @@ function App() {
   const switchVideoDevice = async (deviceId) => {
     if (!room || !localVideoTrackRef.current) return;
     try {
+      setError(null);
       const currentTrack = localVideoTrackRef.current;
-      const newVideoTrack = await Video.createLocalVideoTrack({
-        deviceId: { exact: deviceId },
-      });
+      let newVideoTrack;
+      try {
+        newVideoTrack = await Video.createLocalVideoTrack({
+          deviceId: { exact: deviceId },
+        });
+      } catch (err) {
+        console.warn("Failed to switch video device, falling back:", err);
+        newVideoTrack = await Video.createLocalVideoTrack(); // Fallback to default
+      }
 
       await room.localParticipant.unpublishTrack(currentTrack);
       await room.localParticipant.publishTrack(newVideoTrack);
@@ -186,16 +229,24 @@ function App() {
       setSelectedVideoDevice(deviceId);
     } catch (error) {
       console.error("Error switching video device:", error);
+      setError(`Failed to switch video device: ${error.message}`);
     }
   };
 
   const switchAudioDevice = async (deviceId) => {
     if (!room || !localAudioTrackRef.current) return;
     try {
+      setError(null);
       const currentTrack = localAudioTrackRef.current;
-      const newAudioTrack = await Video.createLocalAudioTrack({
-        deviceId: { exact: deviceId },
-      });
+      let newAudioTrack;
+      try {
+        newAudioTrack = await Video.createLocalAudioTrack({
+          deviceId: { exact: deviceId },
+        });
+      } catch (err) {
+        console.warn("Failed to switch audio device, falling back:", err);
+        newAudioTrack = await Video.createLocalAudioTrack(); // Fallback to default
+      }
 
       await room.localParticipant.unpublishTrack(currentTrack);
       await room.localParticipant.publishTrack(newAudioTrack);
@@ -205,12 +256,15 @@ function App() {
       setSelectedAudioDevice(deviceId);
     } catch (error) {
       console.error("Error switching audio device:", error);
+      setError(`Failed to switch audio device: ${error.message}`);
     }
   };
 
   return (
     <div className="container">
       <h1>🎥 Twilio Video Chat</h1>
+
+      {error && <div className="error-message">{error}</div>}
 
       <div className="form-section">
         <input
@@ -241,23 +295,33 @@ function App() {
               value={selectedVideoDevice}
               onChange={(e) => switchVideoDevice(e.target.value)}
               title="Select Camera"
+              disabled={!videoDevices.length}
             >
-              {videoDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  🎥 {device.label || "Camera"}
-                </option>
-              ))}
+              {videoDevices.length ? (
+                videoDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    🎥 {device.label || "Camera"}
+                  </option>
+                ))
+              ) : (
+                <option value="">No cameras available</option>
+              )}
             </select>
             <select
               value={selectedAudioDevice}
               onChange={(e) => switchAudioDevice(e.target.value)}
               title="Select Microphone"
+              disabled={!audioDevices.length}
             >
-              {audioDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  🎤 {device.label || "Microphone"}
-                </option>
-              ))}
+              {audioDevices.length ? (
+                audioDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    🎤 {device.label || "Microphone"}
+                  </option>
+                ))
+              ) : (
+                <option value="">No microphones available</option>
+              )}
             </select>
           </div>
         </div>
