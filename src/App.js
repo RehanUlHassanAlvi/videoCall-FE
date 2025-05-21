@@ -56,7 +56,7 @@ function App() {
 
     localMediaRef.current.innerHTML = "";
     const videoElement = localVideoTrack.attach();
-    videoElement.setAttribute("controls", "false"); // Disable default controls
+    videoElement.setAttribute("controls", "false");
     localMediaRef.current.appendChild(videoElement);
 
     const attachTrack = track => {
@@ -88,6 +88,46 @@ function App() {
     }
   };
 
+  const switchVideoDevice = async (deviceId) => {
+    if (!room || !localVideoTrackRef.current) return;
+    const currentTrack = localVideoTrackRef.current;
+    const newVideoTrack = await Video.createLocalVideoTrack({
+      deviceId: { exact: deviceId },
+    });
+
+    // Replace the track in the room
+    room.localParticipant.unpublishTrack(currentTrack);
+    room.localParticipant.publishTrack(newVideoTrack);
+
+    // Update the video element
+    localMediaRef.current.innerHTML = "";
+    const videoElement = newVideoTrack.attach();
+    videoElement.setAttribute("controls", "false");
+    localMediaRef.current.appendChild(videoElement);
+
+    // Clean up old track
+    currentTrack.stop();
+    localVideoTrackRef.current = newVideoTrack;
+    setSelectedVideoDevice(deviceId);
+  };
+
+  const switchAudioDevice = async (deviceId) => {
+    if (!room || !localAudioTrackRef.current) return;
+    const currentTrack = localAudioTrackRef.current;
+    const newAudioTrack = await Video.createLocalAudioTrack({
+      deviceId: { exact: deviceId },
+    });
+
+    // Replace the track in the room
+    room.localParticipant.unpublishTrack(currentTrack);
+    room.localParticipant.publishTrack(newAudioTrack);
+
+    // Clean up old track
+    currentTrack.stop();
+    localAudioTrackRef.current = newAudioTrack;
+    setSelectedAudioDevice(deviceId);
+  };
+
   return (
     <div className="container">
       <h1>Twilio Video Chat</h1>
@@ -103,29 +143,6 @@ function App() {
           value={roomName}
           onChange={(e) => setRoomName(e.target.value)}
         />
-
-        <select
-          value={selectedVideoDevice}
-          onChange={(e) => setSelectedVideoDevice(e.target.value)}
-        >
-          {videoDevices.map(device => (
-            <option key={device.deviceId} value={device.deviceId}>
-              🎥 {device.label || "Camera"}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={selectedAudioDevice}
-          onChange={(e) => setSelectedAudioDevice(e.target.value)}
-        >
-          {audioDevices.map(device => (
-            <option key={device.deviceId} value={device.deviceId}>
-              🎤 {device.label || "Microphone"}
-            </option>
-          ))}
-        </select>
-
         <button onClick={joinRoom}>Join Room</button>
       </div>
 
@@ -134,12 +151,40 @@ function App() {
           <h2>🧑‍💻 You</h2>
           <div className="video-box" ref={localMediaRef}></div>
           <div className="video-controls">
-            <button onClick={toggleAudio}>
+            <button
+              onClick={toggleAudio}
+              aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+            >
               {isAudioEnabled ? "Mute Mic" : "Unmute Mic"}
             </button>
-            <button onClick={toggleVideo}>
+            <button
+              onClick={toggleVideo}
+              aria-label={isVideoEnabled ? "Turn off video" : "Turn on video"}
+            >
               {isVideoEnabled ? "Turn Off Video" : "Turn On Video"}
             </button>
+            <select
+              value={selectedVideoDevice}
+              onChange={(e) => switchVideoDevice(e.target.value)}
+              aria-label="Select camera"
+            >
+              {videoDevices.map(device => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  🎥 {device.label || "Camera"}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedAudioDevice}
+              onChange={(e) => switchAudioDevice(e.target.value)}
+              aria-label="Select microphone"
+            >
+              {audioDevices.map(device => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  🎤 {device.label || "Microphone"}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

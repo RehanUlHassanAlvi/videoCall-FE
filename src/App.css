@@ -24,7 +24,6 @@ h1 {
 }
 
 .form-section input,
-.form-section select,
 .form-section button {
   padding: 10px;
   font-size: 14px;
@@ -54,7 +53,7 @@ button:hover {
 .video-wrapper {
   flex: 1 1 45%;
   text-align: center;
-  position: relative; /* Added to support absolute positioning of controls */
+  position: relative;
 }
 
 .video-box {
@@ -68,35 +67,53 @@ button:hover {
 .video-box video {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Ensures video fills the box without distortion */
+  object-fit: cover;
 }
 
 .video-controls {
   display: flex;
   justify-content: center;
-  gap: 10px; /* Matches form-section gap for consistency */
-  padding: 10px; /* Matches form-section padding */
-  background: rgba(0, 0, 0, 0.7); /* Semi-transparent background for visibility */
+  gap: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.7);
   width: 100%;
   position: absolute;
   bottom: 0;
   left: 0;
-  border-bottom-left-radius: 10px; /* Matches video-box border-radius */
-  border-bottom-right-radius: 10px; /* Matches video-box border-radius */
-  box-sizing: border-box; /* Ensures padding doesn't affect width */
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  box-sizing: border-box;
+  flex-wrap: wrap; /* Allow wrapping for smaller screens */
 }
 
-.video-controls button {
+.video-controls button,
+.video-controls select {
   padding: 10px;
   font-size: 14px;
-  border-radius: 6px; /* Matches form-section buttons */
-  background-color: #007bff; /* Matches existing button color */
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #007bff;
   color: white;
-  border: none;
   cursor: pointer;
-  min-width: 100px; /* Slightly smaller than form buttons for compactness */
+  min-width: 100px; /* Slightly smaller than form controls */
 }
 
-.video-controls button:hover {
-  background-color: #0056b3; /* Matches existing button hover color */
+.video-controls select {
+  background-color: #fff; /* White background for select to match form */
+  color: #333; /* Dark text for readability */
+  border: 1px solid #ccc;
+}
+
+.video-controls button:hover,
+.video-controls select:hover {
+  background-color: #0056b3;
+}
+
+@media (max-width: 600px) {
+  .video-controls button,
+  .video-controls select {
+    min-width: 80px;
+    font-size: 12px;
+    padding: 8px;
+  }
 }
