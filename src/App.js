@@ -10,7 +10,7 @@ function App() {
   const remoteMediaRef = useRef();
 
   const joinRoom = async () => {
-    const res = await fetch("http://192.168.18.131:5000/token", {
+    const res = await fetch("https://video-call-be-sooty.vercel.app/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identity, room: roomName }),
