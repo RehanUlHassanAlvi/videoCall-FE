@@ -27,7 +27,7 @@ function App() {
   }, []);
 
   const joinRoom = async () => {
-    const res = await fetch("http://localhost:5000/token", {
+    const res = await fetch("https://video-call-be-sooty.vercel.app/api/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identity, room: roomName }),
