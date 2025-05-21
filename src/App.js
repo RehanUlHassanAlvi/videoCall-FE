@@ -185,6 +185,40 @@ function App() {
     }
   };
 
+  const disconnectRoom = () => {
+    if (!room) return;
+    try {
+      // Stop and detach local tracks
+      if (localVideoTrackRef.current) {
+        localVideoTrackRef.current.stop();
+        localVideoTrackRef.current.detach().forEach((element) => element.remove());
+        localVideoTrackRef.current = null;
+      }
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.stop();
+        localAudioTrackRef.current.detach().forEach((element) => element.remove());
+        localAudioTrackRef.current = null;
+      }
+
+      // Disconnect the room
+      room.disconnect();
+      setRoom(null);
+
+      // Clear media containers
+      localMediaRef.current.innerHTML = "";
+      remoteMediaRef.current.innerHTML = "";
+
+      // Reset video and audio enabled states
+      setIsVideoEnabled(true);
+      setIsAudioEnabled(true);
+
+      setError(null);
+    } catch (error) {
+      console.error("Error disconnecting from room:", error);
+      setError(`Failed to disconnect: ${error.message}`);
+    }
+  };
+
   const toggleVideo = () => {
     if (localVideoTrackRef.current) {
       localVideoTrackRef.current.enable(!isVideoEnabled);
@@ -277,7 +311,8 @@ function App() {
           value={roomName}
           onChange={(e) => setRoomName(e.target.value)}
         />
-        <button onClick={joinRoom}>Join Room</button>
+        <button onClick={joinRoom} disabled={room}>Join Room</button>
+        <button onClick={disconnectRoom} disabled={!room}>Disconnect</button>
       </div>
 
       <div className="video-section">
@@ -285,17 +320,17 @@ function App() {
           <h2>🧑‍💻 You</h2>
           <div className="video-box" ref={localMediaRef}></div>
           <div className="video-controls">
-            <button onClick={toggleAudio} title="Toggle Microphone">
+            <button onClick={toggleAudio} title="Toggle Microphone" disabled={!room}>
               {isAudioEnabled ? <FaMicrophone /> : <FaMicrophoneSlash />}
             </button>
-            <button onClick={toggleVideo} title="Toggle Camera">
+            <button onClick={toggleVideo} title="Toggle Camera" disabled={!room}>
               {isVideoEnabled ? <FaVideo /> : <FaVideoSlash />}
             </button>
             <select
               value={selectedVideoDevice}
               onChange={(e) => switchVideoDevice(e.target.value)}
               title="Select Camera"
-              disabled={!videoDevices.length}
+              disabled={!videoDevices.length || !room}
             >
               {videoDevices.length ? (
                 videoDevices.map((device) => (
@@ -311,7 +346,7 @@ function App() {
               value={selectedAudioDevice}
               onChange={(e) => switchAudioDevice(e.target.value)}
               title="Select Microphone"
-              disabled={!audioDevices.length}
+              disabled={!audioDevices.length || !room}
             >
               {audioDevices.length ? (
                 audioDevices.map((device) => (
