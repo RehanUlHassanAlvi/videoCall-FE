@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef } from "react";
 import Video from "twilio-video";
-import "./App.css"; 
+import "./App.css";
 
 function App() {
   const [identity, setIdentity] = useState("");
   const [roomName, setRoomName] = useState("");
   const [room, setRoom] = useState(null);
-
   const [videoDevices, setVideoDevices] = useState([]);
   const [audioDevices, setAudioDevices] = useState([]);
   const [selectedVideoDevice, setSelectedVideoDevice] = useState("");
   const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
 
   const localMediaRef = useRef();
   const remoteMediaRef = useRef();
+  const localVideoTrackRef = useRef(null);
+  const localAudioTrackRef = useRef(null);
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {
@@ -41,6 +44,9 @@ function App() {
       deviceId: { exact: selectedAudioDevice },
     });
 
+    localVideoTrackRef.current = localVideoTrack;
+    localAudioTrackRef.current = localAudioTrack;
+
     const joinedRoom = await Video.connect(data.token, {
       name: roomName,
       tracks: [localAudioTrack, localVideoTrack],
@@ -49,7 +55,9 @@ function App() {
     setRoom(joinedRoom);
 
     localMediaRef.current.innerHTML = "";
-    localMediaRef.current.appendChild(localVideoTrack.attach());
+    const videoElement = localVideoTrack.attach();
+    videoElement.setAttribute("controls", "false"); // Disable default controls
+    localMediaRef.current.appendChild(videoElement);
 
     const attachTrack = track => {
       remoteMediaRef.current.appendChild(track.attach());
@@ -64,6 +72,20 @@ function App() {
         if (pub.track) attachTrack(pub.track);
       });
     });
+  };
+
+  const toggleVideo = () => {
+    if (localVideoTrackRef.current) {
+      localVideoTrackRef.current.enable(!isVideoEnabled);
+      setIsVideoEnabled(!isVideoEnabled);
+    }
+  };
+
+  const toggleAudio = () => {
+    if (localAudioTrackRef.current) {
+      localAudioTrackRef.current.enable(!isAudioEnabled);
+      setIsAudioEnabled(!isAudioEnabled);
+    }
   };
 
   return (
@@ -111,6 +133,14 @@ function App() {
         <div className="video-wrapper">
           <h2>🧑‍💻 You</h2>
           <div className="video-box" ref={localMediaRef}></div>
+          <div className="video-controls">
+            <button onClick={toggleAudio}>
+              {isAudioEnabled ? "Mute Mic" : "Unmute Mic"}
+            </button>
+            <button onClick={toggleVideo}>
+              {isVideoEnabled ? "Turn Off Video" : "Turn On Video"}
+            </button>
+          </div>
         </div>
 
         <div className="video-wrapper">
